@@ -54,6 +54,7 @@ namespace esphome
       static int climate_write(hap_write_data_t write_data[], int count, void* serv_priv, void* write_priv) {
         std::string key((char*)serv_priv);
         climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)));
+
         for (int i = 0; i < count; i++) {
           hap_write_data_t* write = &write_data[i];
           const char* type = hap_char_get_type_uuid(write->hc);
