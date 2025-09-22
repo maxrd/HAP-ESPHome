@@ -3,7 +3,8 @@
 #ifdef USE_CLIMATE
 #include <esphome/core/application.h>
 #include <esphome/components/climate/climate_mode.h>
-#include <esphome/components/climate/climate_state.h>
+#include <esphome/components/climate/climate_traits.h>
+#include <esphome/components/climate/climate.h>
 #include <hap.h>
 #include <hap_apple_servs.h>
 #include <hap_apple_chars.h>
