@@ -17,6 +17,7 @@ namespace homekit {
 class ClimateEntity : public HAPEntity {
  private:
   climate::Climate* climatePtr;
+  bool hardware_available = true;  // 硬體存在性檢查
   static constexpr const char* TAG = "ClimateEntity";
 
   static void on_climate_update(climate::Climate& obj) {
@@ -94,12 +95,20 @@ class ClimateEntity : public HAPEntity {
   void setup() override {
     if (!climatePtr) {
       ESP_LOGE(TAG, "No climate pointer, cannot setup HomeKit ClimateEntity!");
+      hardware_available = false;
+      return;
+    }
+
+    // 嘗試檢查硬體可用性 (例如 UART 或其他驅動)
+    if (!climatePtr->get_traits().get_supports_current_temperature()) {
+      ESP_LOGW(TAG, "Climate hardware not available, skipping setup");
+      hardware_available = false;
       return;
     }
 
     // 設置回調
     climatePtr->add_on_state_callback([this](climate::Climate& obj) {
-      ClimateEntity::on_climate_update(obj);
+      if (hardware_available) ClimateEntity::on_climate_update(obj);
     });
 
     // HomeKit accessory 配置
@@ -149,7 +158,9 @@ class ClimateEntity : public HAPEntity {
     hap_serv_set_write_cb(service, climate_write);
     hap_serv_set_read_cb(service, climate_read);
     hap_acc_add_serv(accessory, service);
-    hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_name));
+
+    if (hardware_available)
+      hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_name));
   }
 };
 
