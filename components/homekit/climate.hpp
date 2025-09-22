@@ -93,12 +93,13 @@ class ClimateEntity : public HAPEntity {
     snprintf(acc_name, sizeof(acc_name), "%s", climatePtr->get_name().c_str());
     snprintf(acc_serial, sizeof(acc_serial), "%lu", climatePtr->get_object_id_hash());
 
+    // 使用 meta (有的話)，否則 fallback
     acc_cfg.name = acc_name;
     acc_cfg.serial_num = acc_serial;
-    strcpy(acc_cfg.model, "ESP-CLIMATE");
-    strcpy(acc_cfg.manufacturer, "rednblkx");
-    strcpy(acc_cfg.fw_rev, "0.1.0");
-    acc_cfg.hw_rev = nullptr;
+    acc_cfg.model = (char *) (this->meta.count("model") ? this->meta["model"].c_str() : "ESP-CLIMATE");
+    acc_cfg.manufacturer = (char *) (this->meta.count("manufacturer") ? this->meta["manufacturer"].c_str() : "rednblkx");
+    acc_cfg.fw_rev = (char *) (this->meta.count("fw_rev") ? this->meta["fw_rev"].c_str() : "0.1.0");
+    acc_cfg.hw_rev = (char *)"1.0";
     acc_cfg.cid = HAP_CID_THERMOSTAT;
     acc_cfg.identify_routine = acc_identify;
 
