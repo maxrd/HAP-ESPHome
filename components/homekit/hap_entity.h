@@ -3,28 +3,49 @@
 #include "esphome/core/entity_base.h"
 #include <esp_log.h>
 #include <map>
+#include <string>
 
-namespace esphome
-{
-  namespace homekit
-  {
-    class HAPEntity
-    {
-    private:
-      static constexpr const char* TAG = "HAPEntity";
-    protected:
-      std::map<AInfo, const char*> accessory_info = { {NAME, NULL}, {MODEL, "HAP-GENERIC"}, {SN, NULL}, {MANUFACTURER, "rednblkx"}, {FW_REV, "0.1"} };
-    public:
-      HAPEntity(){ }
-      HAPEntity(std::map<AInfo, const char*> accessory_info) { setInfo(accessory_info); }
-      void setInfo(std::map<AInfo, const char*> info) {
-        for (const auto& pair : info) {
-          if (this->accessory_info.find(pair.first) != this->accessory_info.end()) {
-            this->accessory_info[pair.first] = pair.second;
-          }
-        }
+namespace esphome {
+namespace homekit {
+
+class HAPEntity {
+ private:
+  static constexpr const char* TAG = "HAPEntity";
+
+ protected:
+  // 使用 std::string 取代 const char*，方便管理記憶體
+  std::map<AInfo, std::string> accessory_info = {
+      {NAME, ""},
+      {MODEL, "HAP-GENERIC"},
+      {SN, ""},
+      {MANUFACTURER, "rednblkx"},
+      {FW_REV, "0.1"}};
+
+ public:
+  HAPEntity() {}
+
+  explicit HAPEntity(const std::map<AInfo, std::string>& info) { setInfo(info); }
+
+  void setInfo(const std::map<AInfo, std::string>& info) {
+    for (const auto& pair : info) {
+      if (accessory_info.find(pair.first) != accessory_info.end()) {
+        accessory_info[pair.first] = pair.second;
       }
-      void virtual setup() { ESP_LOGI(TAG, "Uninmplemented!"); }
-    };
+    }
   }
-}
+
+  virtual void setup() {
+    ESP_LOGI(TAG, "Setup not implemented for this entity!");
+  }
+
+  // 安全取得 accessory_info
+  std::string getInfo(AInfo key) const {
+    auto it = accessory_info.find(key);
+    if (it != accessory_info.end())
+      return it->second;
+    return "";
+  }
+};
+
+}  // namespace homekit
+}  // namespace esphome
