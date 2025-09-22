@@ -17,12 +17,14 @@ private:
     static constexpr const char* TAG = "ClimateEntity";
     climate::Climate* climatePtr;
 
+    // 更新 HomeKit 日誌
     static void on_climate_update(climate::Climate& obj) {
-        ESP_LOGI(TAG, "%s Mode: %d Action: %d CTemp: %.2f TTemp: %.2f CHum: %.2f THum: %.2f", 
-                 obj.get_name().c_str(), obj.mode, obj.action, obj.current_temperature, obj.target_temperature, 
+        ESP_LOGI(TAG, "%s Mode: %d Action: %d CTemp: %.2f TTemp: %.2f CHum: %.2f THum: %.2f",
+                 obj.get_name().c_str(), obj.mode, obj.action, obj.current_temperature, obj.target_temperature,
                  obj.current_humidity, obj.target_humidity);
     }
 
+    // 防呆讀取
     static int climate_read(hap_char_t* hc, hap_status_t* status_code, void* serv_priv, void* read_priv) {
         if (!serv_priv) return HAP_STATUS_OO_RES;
         std::string key((char*)serv_priv);
@@ -47,6 +49,7 @@ private:
         return HAP_SUCCESS;
     }
 
+    // 防呆寫入
     static int climate_write(hap_write_data_t write_data[], int count, void* serv_priv, void* write_priv) {
         if (!serv_priv) return HAP_STATUS_OO_RES;
         std::string key((char*)serv_priv);
@@ -73,6 +76,7 @@ private:
         return HAP_SUCCESS;
     }
 
+    // HomeKit Identify 防呆
     static int acc_identify(hap_acc_t* ha) {
         ESP_LOGI(TAG, "Accessory identified");
         return HAP_SUCCESS;
@@ -81,10 +85,10 @@ private:
 public:
     using HAPEntity::setup;
 
-    ClimateEntity(climate::Climate* climatePtr)
-        : HAPEntity({{MODEL, "HAP-CLIMATE"}}), climatePtr(climatePtr) {}
+    ClimateEntity(climate::Climate* ptr)
+        : HAPEntity({{MODEL, "HAP-CLIMATE"}}), climatePtr(ptr) {}
 
-    void setup() {
+    void setup() override {
         if (!climatePtr) {
             ESP_LOGW(TAG, "Climate pointer is NULL, skipping HomeKit setup");
             return;
@@ -94,8 +98,8 @@ public:
         static char acc_name[32];
         static char acc_serial[32];
 
-        snprintf(acc_name, sizeof(acc_name), "%s", this->climatePtr->get_name().c_str());
-        snprintf(acc_serial, sizeof(acc_serial), "%lu", this->climatePtr->get_object_id_hash());
+        snprintf(acc_name, sizeof(acc_name), "%s", climatePtr->get_name().c_str());
+        snprintf(acc_serial, sizeof(acc_serial), "%lu", climatePtr->get_object_id_hash());
 
         acc_cfg.name = acc_name;
         acc_cfg.serial_num = acc_serial;
@@ -104,17 +108,17 @@ public:
         strcpy(acc_cfg.fw_rev, "0.1.0");
         strcpy(acc_cfg.pv, "1.1.0");
         acc_cfg.hw_rev = nullptr;
-        acc_cfg.cid = HAP_CID_BRIDGE;
+        acc_cfg.cid = HAP_CID_THERMOSTAT;
         acc_cfg.identify_routine = acc_identify;
 
         uint8_t current_mode = 0, target_mode = 0;
-        switch (this->climatePtr->action) {
+        switch (climatePtr->action) {
             case climate::CLIMATE_ACTION_OFF: current_mode = 0; break;
             case climate::CLIMATE_ACTION_HEATING: current_mode = 1; break;
             case climate::CLIMATE_ACTION_COOLING: current_mode = 2; break;
             default: current_mode = 0; break;
         }
-        switch (this->climatePtr->mode) {
+        switch (climatePtr->mode) {
             case climate::CLIMATE_MODE_OFF: target_mode = 0; break;
             case climate::CLIMATE_MODE_HEAT: target_mode = 1; break;
             case climate::CLIMATE_MODE_COOL: target_mode = 2; break;
@@ -123,31 +127,31 @@ public:
         }
 
         hap_serv_t* service = hap_serv_thermostat_create(current_mode, target_mode,
-                                                         this->climatePtr->current_temperature,
-                                                         this->climatePtr->target_temperature,
+                                                         climatePtr->current_temperature,
+                                                         climatePtr->target_temperature,
                                                          CELSIUS);
 
-        climate::ClimateTraits traits = this->climatePtr->get_traits();
+        climate::ClimateTraits traits = climatePtr->get_traits();
         if (traits.get_supports_current_humidity()) {
-            hap_serv_add_char(service, hap_char_current_relative_humidity_create(this->climatePtr->current_humidity));
+            hap_serv_add_char(service, hap_char_current_relative_humidity_create(climatePtr->current_humidity));
         }
         if (traits.get_supports_target_humidity()) {
-            hap_serv_add_char(service, hap_char_target_relative_humidity_create(this->climatePtr->target_humidity));
+            hap_serv_add_char(service, hap_char_target_relative_humidity_create(climatePtr->target_humidity));
         }
 
         hap_acc_t* accessory = hap_acc_create(&acc_cfg);
-        hap_serv_set_priv(service, strdup(acc_serial));  // heap 儲存，避免 StoreProhibited
-        hap_serv_set_write_cb(service, climate_write);
-        hap_serv_set_read_cb(service, climate_read);
-        hap_acc_add_serv(accessory, service);
-
-        // 防呆：檢查 HomeKit bridge 初始化
-        if (!hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_serial))) {
-            ESP_LOGW(TAG, "Failed to add bridged accessory, check HomeKit initialization");
+        if (accessory != nullptr) {
+            hap_serv_set_priv(service, strdup(acc_serial));
+            hap_serv_set_write_cb(service, climate_write);
+            hap_serv_set_read_cb(service, climate_read);
+            hap_acc_add_serv(accessory, service);
+            hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_serial));
+        } else {
+            ESP_LOGW(TAG, "Failed to create HomeKit accessory");
         }
     }
 };
 
-}  // namespace homekit
-}  // namespace esphome
+} // namespace homekit
+} // namespace esphome
 #endif
