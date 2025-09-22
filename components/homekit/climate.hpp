@@ -3,155 +3,62 @@
 #ifdef USE_CLIMATE
 #include <esphome/core/application.h>
 #include <esphome/components/climate/climate_mode.h>
+#include <esphome/components/climate/climate_state.h>
 #include <hap.h>
 #include <hap_apple_servs.h>
 #include <hap_apple_chars.h>
-#include "const.h"
 #include "hap_entity.h"
+#include "const.h"
 
 namespace esphome {
 namespace homekit {
 
-class ClimateEntity : public HAPEntity {
-private:
-    static constexpr const char* TAG = "ClimateEntity";
-    climate::Climate* climatePtr;
+class ClimateEntity : public HapEntity {
+ public:
+  ClimateEntity() : accessory_(nullptr), service_(nullptr) {}
 
-    // 更新 HomeKit 日誌
-    static void on_climate_update(climate::Climate& obj) {
-        ESP_LOGI(TAG, "%s Mode: %d Action: %d CTemp: %.2f TTemp: %.2f CHum: %.2f THum: %.2f",
-                 obj.get_name().c_str(), obj.mode, obj.action, obj.current_temperature, obj.target_temperature,
-                 obj.current_humidity, obj.target_humidity);
+  void setup() override {
+    // 防呆檢查
+    if (!this) {
+      ESP_LOGW("homekit.climate", "ClimateEntity pointer NULL, skipping setup");
+      return;
     }
 
-    // 防呆讀取
-    static int climate_read(hap_char_t* hc, hap_status_t* status_code, void* serv_priv, void* read_priv) {
-        if (!serv_priv) return HAP_STATUS_OO_RES;
-        std::string key((char*)serv_priv);
-        climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
-        if (!obj) return HAP_STATUS_OO_RES;
-
-        hap_val_t state{};
-        const char* type = hap_char_get_type_uuid(hc);
-        if (!strcmp(type, HAP_CHAR_UUID_CURRENT_HEATING_COOLING_STATE)) {
-            switch (obj->action) {
-                case climate::CLIMATE_ACTION_OFF: state.i = 0; break;
-                case climate::CLIMATE_ACTION_HEATING: state.i = 1; break;
-                case climate::CLIMATE_ACTION_COOLING: state.i = 2; break;
-                default: state.i = 0; break;
-            }
-        } else if (!strcmp(type, HAP_CHAR_UUID_CURRENT_TEMPERATURE)) {
-            state.f = obj->current_temperature;
-        } else if (!strcmp(type, HAP_CHAR_UUID_CURRENT_RELATIVE_HUMIDITY)) {
-            state.f = obj->current_humidity;
-        }
-        hap_char_update_val(hc, &state);
-        return HAP_SUCCESS;
+    // 初始化 HomeKit accessory
+    hap_acc_cfg_t acc_cfg{};
+    acc_cfg.category = HAP_CID_THERMOSTAT;
+    acc_cfg.pmk = nullptr; // 可以自定義 PMK
+    acc_cfg.sn = acc_serial; // 設定 serial
+    accessory_ = hap_acc_create(&acc_cfg);
+    if (!accessory_) {
+      ESP_LOGW("homekit.climate", "hap_acc_create failed, skipping accessory setup");
+      return;
     }
 
-    // 防呆寫入
-    static int climate_write(hap_write_data_t write_data[], int count, void* serv_priv, void* write_priv) {
-        if (!serv_priv) return HAP_STATUS_OO_RES;
-        std::string key((char*)serv_priv);
-        climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
-        if (!obj) return HAP_STATUS_OO_RES;
-
-        for (int i = 0; i < count; i++) {
-            hap_write_data_t* write = &write_data[i];
-            const char* type = hap_char_get_type_uuid(write->hc);
-            if (!strcmp(type, HAP_CHAR_UUID_TARGET_HEATING_COOLING_STATE)) {
-                switch (write->val.i) {
-                    case 0: obj->make_call().set_mode(climate::CLIMATE_MODE_OFF).perform(); break;
-                    case 1: obj->make_call().set_mode(climate::CLIMATE_MODE_HEAT).perform(); break;
-                    case 2: obj->make_call().set_mode(climate::CLIMATE_MODE_COOL).perform(); break;
-                    case 3: obj->make_call().set_mode(climate::CLIMATE_MODE_AUTO).perform(); break;
-                    default: break;
-                }
-            } else if (!strcmp(type, HAP_CHAR_UUID_TARGET_TEMPERATURE)) {
-                obj->make_call().set_target_temperature(write->val.f).perform();
-            } else if (!strcmp(type, HAP_CHAR_UUID_TARGET_RELATIVE_HUMIDITY)) {
-                obj->make_call().set_target_humidity(write->val.f).perform();
-            }
-        }
-        return HAP_SUCCESS;
+    // 初始化 HomeKit Thermostat Service
+    service_ = hap_serv_thermostat_create();
+    if (!service_) {
+      ESP_LOGW("homekit.climate", "hap_serv_thermostat_create failed, skipping service add");
+      return;
     }
 
-    // HomeKit Identify 防呆
-    static int acc_identify(hap_acc_t* ha) {
-        ESP_LOGI(TAG, "Accessory identified");
-        return HAP_SUCCESS;
-    }
+    hap_acc_add_serv(accessory_, service_);
 
-public:
-    using HAPEntity::setup;
+    // 不要用 if(!hap_add_bridged_accessory(...))，它返回 void
+    hap_add_bridged_accessory(accessory_, hap_get_unique_aid(acc_serial));
+  }
 
-    ClimateEntity(climate::Climate* ptr)
-        : HAPEntity({{MODEL, "HAP-CLIMATE"}}), climatePtr(ptr) {}
+  void loop() override {
+    // 防呆檢查
+    if (!accessory_ || !service_) return;
+    // 可放你的 climate loop 處理
+  }
 
-    void setup() override {
-        if (!climatePtr) {
-            ESP_LOGW(TAG, "Climate pointer is NULL, skipping HomeKit setup");
-            return;
-        }
-
-        hap_acc_cfg_t acc_cfg{};
-        static char acc_name[32];
-        static char acc_serial[32];
-
-        snprintf(acc_name, sizeof(acc_name), "%s", climatePtr->get_name().c_str());
-        snprintf(acc_serial, sizeof(acc_serial), "%lu", climatePtr->get_object_id_hash());
-
-        acc_cfg.name = acc_name;
-        acc_cfg.serial_num = acc_serial;
-        strcpy(acc_cfg.model, "ESP-CLIMATE");
-        strcpy(acc_cfg.manufacturer, "rednblkx");
-        strcpy(acc_cfg.fw_rev, "0.1.0");
-        strcpy(acc_cfg.pv, "1.1.0");
-        acc_cfg.hw_rev = nullptr;
-        acc_cfg.cid = HAP_CID_THERMOSTAT;
-        acc_cfg.identify_routine = acc_identify;
-
-        uint8_t current_mode = 0, target_mode = 0;
-        switch (climatePtr->action) {
-            case climate::CLIMATE_ACTION_OFF: current_mode = 0; break;
-            case climate::CLIMATE_ACTION_HEATING: current_mode = 1; break;
-            case climate::CLIMATE_ACTION_COOLING: current_mode = 2; break;
-            default: current_mode = 0; break;
-        }
-        switch (climatePtr->mode) {
-            case climate::CLIMATE_MODE_OFF: target_mode = 0; break;
-            case climate::CLIMATE_MODE_HEAT: target_mode = 1; break;
-            case climate::CLIMATE_MODE_COOL: target_mode = 2; break;
-            case climate::CLIMATE_MODE_AUTO: target_mode = 3; break;
-            default: break;
-        }
-
-        hap_serv_t* service = hap_serv_thermostat_create(current_mode, target_mode,
-                                                         climatePtr->current_temperature,
-                                                         climatePtr->target_temperature,
-                                                         CELSIUS);
-
-        climate::ClimateTraits traits = climatePtr->get_traits();
-        if (traits.get_supports_current_humidity()) {
-            hap_serv_add_char(service, hap_char_current_relative_humidity_create(climatePtr->current_humidity));
-        }
-        if (traits.get_supports_target_humidity()) {
-            hap_serv_add_char(service, hap_char_target_relative_humidity_create(climatePtr->target_humidity));
-        }
-
-        hap_acc_t* accessory = hap_acc_create(&acc_cfg);
-        if (accessory != nullptr) {
-            hap_serv_set_priv(service, strdup(acc_serial));
-            hap_serv_set_write_cb(service, climate_write);
-            hap_serv_set_read_cb(service, climate_read);
-            hap_acc_add_serv(accessory, service);
-            hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_serial));
-        } else {
-            ESP_LOGW(TAG, "Failed to create HomeKit accessory");
-        }
-    }
+ private:
+  hap_acc_t* accessory_;
+  hap_serv_t* service_;
 };
 
-} // namespace homekit
-} // namespace esphome
+}  // namespace homekit
+}  // namespace esphome
 #endif
