@@ -26,10 +26,10 @@ namespace esphome
       }
 
       static int climate_read(hap_char_t* hc, hap_status_t* status_code, void* serv_priv, void* read_priv) {
-        if (!serv_priv) return HAP_STATUS_FAILURE;
+        if (!serv_priv) return HAP_STATUS_INVALID_ARG;
         std::string key((char*)serv_priv);
         climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), 0, false);
-        if (!obj) return HAP_STATUS_FAILURE;
+        if (!obj) return HAP_STATUS_INVALID_ARG;
 
         hap_val_t state{};
         const char* type = hap_char_get_type_uuid(hc);
@@ -50,10 +50,10 @@ namespace esphome
       }
 
       static int climate_write(hap_write_data_t write_data[], int count, void* serv_priv, void* write_priv) {
-        if (!serv_priv) return HAP_STATUS_FAILURE;
+        if (!serv_priv) return HAP_STATUS_INVALID_ARG;
         std::string key((char*)serv_priv);
         climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), 0, false);
-        if (!obj) return HAP_STATUS_FAILURE;
+        if (!obj) return HAP_STATUS_INVALID_ARG;
 
         for (int i = 0; i < count; i++) {
           hap_write_data_t* write = &write_data[i];
