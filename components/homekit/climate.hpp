@@ -9,6 +9,7 @@
 #include <hap_apple_chars.h>
 #include "hap_entity.h"
 #include "const.h"
+#include <cmath>
 
 namespace esphome {
 namespace homekit {
@@ -105,12 +106,12 @@ class ClimateEntity : public HAPEntity {
       return;
     }
 
-    // 1. 設置回調
+    // 設置回調
     climatePtr->add_on_state_callback([this](climate::Climate& obj) {
       ClimateEntity::on_climate_update(obj);
     });
 
-    // 2. 配置 HomeKit accessory
+    // HomeKit accessory 配置
     hap_acc_cfg_t acc_cfg{};
     static char acc_name[32];
     static char acc_serial[32];
@@ -126,7 +127,7 @@ class ClimateEntity : public HAPEntity {
     acc_cfg.cid = HAP_CID_THERMOSTAT;
     acc_cfg.identify_routine = acc_identify;
 
-    // 3. HomeKit service
+    // 建立 HomeKit Thermostat service
     uint8_t current_mode = 0, target_mode = 0;
     switch (climatePtr->action) {
       case climate::CLIMATE_ACTION_OFF: current_mode = 0; break;
@@ -155,7 +156,7 @@ class ClimateEntity : public HAPEntity {
       hap_serv_add_char(service, hap_char_target_relative_humidity_create(climatePtr->target_humidity));
 
     hap_acc_t* accessory = hap_acc_create(&acc_cfg);
-    hap_serv_set_priv(service, acc_serial);  // 使用 static char (避免釋放)
+    hap_serv_set_priv(service, acc_serial);
     hap_serv_set_write_cb(service, climate_write);
     hap_serv_set_read_cb(service, climate_read);
     hap_acc_add_serv(accessory, service);
