@@ -13,7 +13,6 @@ class HAPEntity {
   static constexpr const char* TAG = "HAPEntity";
 
  protected:
-  // 使用 std::string 取代 const char*，方便管理記憶體
   std::map<AInfo, std::string> accessory_info = {
       {NAME, ""},
       {MODEL, "HAP-GENERIC"},
@@ -38,7 +37,6 @@ class HAPEntity {
     ESP_LOGI(TAG, "Setup not implemented for this entity!");
   }
 
-  // 安全取得 accessory_info
   std::string getInfo(AInfo key) const {
     auto it = accessory_info.find(key);
     if (it != accessory_info.end())
