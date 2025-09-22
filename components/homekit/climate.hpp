@@ -31,7 +31,6 @@ class ClimateEntity : public HAPEntity {
 
     hap_val_t state{};
     const char* type = hap_char_get_type_uuid(hc);
-
     if (!strcmp(type, HAP_CHAR_UUID_CURRENT_HEATING_COOLING_STATE)) {
       switch (obj->action) {
         case climate::CLIMATE_ACTION_OFF: state.i = 0; break;
@@ -57,7 +56,6 @@ class ClimateEntity : public HAPEntity {
     for (int i = 0; i < count; i++) {
       hap_write_data_t* write = &write_data[i];
       const char* type = hap_char_get_type_uuid(write->hc);
-
       if (!strcmp(type, HAP_CHAR_UUID_TARGET_HEATING_COOLING_STATE)) {
         switch (write->val.i) {
           case 0: obj->make_call().set_mode(climate::CLIMATE_MODE_OFF).perform(); break;
@@ -86,7 +84,7 @@ class ClimateEntity : public HAPEntity {
   ClimateEntity(climate::Climate* climatePtr)
       : HAPEntity({{MODEL, "HAP-CLIMATE"}}), climatePtr(climatePtr) {}
 
-  void setup(TemperatureUnits units = CELSIUS) override {
+  void setup(TemperatureUnits units = CELSIUS) {  // remove override
     if (!climatePtr) {
       ESP_LOGW(TAG, "Climate pointer is null, skipping HomeKit setup.");
       return;
@@ -138,7 +136,7 @@ class ClimateEntity : public HAPEntity {
     }
 
     hap_acc_t* accessory = hap_acc_create(&acc_cfg);
-    hap_serv_set_priv(service, acc_serial);  // 使用靜態字串
+    hap_serv_set_priv(service, acc_serial);
     hap_serv_set_write_cb(service, climate_write);
     hap_serv_set_read_cb(service, climate_read);
     hap_acc_add_serv(accessory, service);
