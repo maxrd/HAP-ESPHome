@@ -20,16 +20,21 @@ namespace esphome
       climate::Climate* climatePtr;
 
       static void on_climate_update(climate::Climate* obj) {
-        ESP_LOGI(TAG, "%s Mode: %d Action: %d CTemp: %.2f TTemp: %.2f CHum: %.2f THum: %.2f", 
-                 obj->get_name().c_str(), obj->mode, obj->action, obj->current_temperature, obj->target_temperature, 
-                 obj->current_humidity, obj->target_humidity);
+        if (!obj) return;
+        ESP_LOGI(TAG, "%s Mode: %d Action: %d CTemp: %.2f TTemp: %.2f CHum: %.2f THum: %.2f",
+          obj->get_name().c_str(), obj->mode, obj->action,
+          obj->current_temperature, obj->target_temperature,
+          obj->current_humidity, obj->target_humidity);
       }
 
       static int climate_read(hap_char_t* hc, hap_status_t* status_code, void* serv_priv, void* read_priv) {
         std::string key((char*)serv_priv);
         climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
+        if (!obj) return HAP_FAIL;
+
         hap_val_t state{};
         const char* type = hap_char_get_type_uuid(hc);
+
         if (!strcmp(type, HAP_CHAR_UUID_CURRENT_HEATING_COOLING_STATE)) {
           switch (obj->action) {
             case climate::CLIMATE_ACTION_OFF: state.i = 0; break;
@@ -42,6 +47,7 @@ namespace esphome
         } else if (!strcmp(type, HAP_CHAR_UUID_CURRENT_RELATIVE_HUMIDITY)) {
           state.f = obj->current_humidity;
         }
+
         hap_char_update_val(hc, &state);
         return HAP_SUCCESS;
       }
@@ -49,10 +55,12 @@ namespace esphome
       static int climate_write(hap_write_data_t write_data[], int count, void* serv_priv, void* write_priv) {
         std::string key((char*)serv_priv);
         climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
+        if (!obj) return HAP_FAIL;
 
         for (int i = 0; i < count; i++) {
           hap_write_data_t* write = &write_data[i];
           const char* type = hap_char_get_type_uuid(write->hc);
+
           if (!strcmp(type, HAP_CHAR_UUID_TARGET_HEATING_COOLING_STATE)) {
             switch (write->val.i) {
               case 0: obj->make_call().set_mode(climate::CLIMATE_MODE_OFF).perform(); break;
@@ -78,16 +86,21 @@ namespace esphome
     public:
       using HAPEntity::setup;
 
-      ClimateEntity(climate::Climate* climatePtr)
-          : HAPEntity({{MODEL, "HAP-CLIMATE"}}), climatePtr(climatePtr) {}
+      ClimateEntity(climate::Climate* ptr)
+        : HAPEntity({{MODEL, "HAP-CLIMATE"}}), climatePtr(ptr) {}
 
-      void setup(TemperatureUnits units = CELSIUS) {
+      void setup(TemperatureUnits units = CELSIUS) override {
+        if (!climatePtr) {
+          ESP_LOGE(TAG, "climatePtr is NULL!");
+          return;
+        }
+
         hap_acc_cfg_t acc_cfg{};
         static char acc_name[32];
         static char acc_serial[32];
 
-        snprintf(acc_name, sizeof(acc_name), "%s", this->climatePtr->get_name().c_str());
-        snprintf(acc_serial, sizeof(acc_serial), "%lu", this->climatePtr->get_object_id_hash());
+        snprintf(acc_name, sizeof(acc_name), "%s", climatePtr->get_name().c_str());
+        snprintf(acc_serial, sizeof(acc_serial), "%lu", climatePtr->get_object_id_hash());
 
         acc_cfg.name = acc_name;
         acc_cfg.serial_num = acc_serial;
@@ -100,13 +113,13 @@ namespace esphome
         acc_cfg.identify_routine = acc_identify;
 
         uint8_t current_mode = 0, target_mode = 0;
-        switch (this->climatePtr->action) {
+        switch (climatePtr->action) {
           case climate::CLIMATE_ACTION_OFF: current_mode = 0; break;
           case climate::CLIMATE_ACTION_HEATING: current_mode = 1; break;
           case climate::CLIMATE_ACTION_COOLING: current_mode = 2; break;
           default: current_mode = 0; break;
         }
-        switch (this->climatePtr->mode) {
+        switch (climatePtr->mode) {
           case climate::CLIMATE_MODE_OFF: target_mode = 0; break;
           case climate::CLIMATE_MODE_HEAT: target_mode = 1; break;
           case climate::CLIMATE_MODE_COOL: target_mode = 2; break;
@@ -115,27 +128,27 @@ namespace esphome
         }
 
         hap_serv_t* service = hap_serv_thermostat_create(current_mode, target_mode,
-                                                         this->climatePtr->current_temperature,
-                                                         this->climatePtr->target_temperature,
+                                                         climatePtr->current_temperature,
+                                                         climatePtr->target_temperature,
                                                          units);
 
-        climate::ClimateTraits traits = this->climatePtr->get_traits();
-        if (traits.get_supports_current_humidity()) {
-          hap_serv_add_char(service, hap_char_current_relative_humidity_create(this->climatePtr->current_humidity));
-        }
-        if (traits.get_supports_target_humidity()) {
-          hap_serv_add_char(service, hap_char_target_relative_humidity_create(this->climatePtr->target_humidity));
-        }
+        auto traits = climatePtr->get_traits();
+        if (traits.get_supports_current_humidity())
+          hap_serv_add_char(service, hap_char_current_relative_humidity_create(climatePtr->current_humidity));
+        if (traits.get_supports_target_humidity())
+          hap_serv_add_char(service, hap_char_target_relative_humidity_create(climatePtr->target_humidity));
 
         hap_acc_t* accessory = hap_acc_create(&acc_cfg);
-        hap_serv_set_priv(service, strdup(acc_serial));
+        static char priv_buffer[32];
+        strncpy(priv_buffer, acc_serial, sizeof(priv_buffer));
+        hap_serv_set_priv(service, priv_buffer);
         hap_serv_set_write_cb(service, climate_write);
         hap_serv_set_read_cb(service, climate_read);
         hap_acc_add_serv(accessory, service);
-        hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_serial));
+        hap_add_bridged_accessory(accessory, hap_get_unique_aid(priv_buffer));
 
-        // 修正 lambda 型別問題
-        climatePtr->add_on_state_callback([](climate::Climate &obj) {
+        // callback
+        climatePtr->add_on_state_callback([](climate::Climate &obj){
           ClimateEntity::on_climate_update(&obj);
         });
       }
