@@ -26,8 +26,18 @@ class ClimateEntity : public HAPEntity {
   }
 
   static int climate_read(hap_char_t* hc, hap_status_t* status_code, void* serv_priv, void* read_priv) {
+    if (serv_priv == nullptr) {
+      *status_code = HAP_STATUS_RES_ABSENT;
+      return HAP_FAIL;
+    }
     std::string key((char*)serv_priv);
     climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
+    if (obj == nullptr) {
+      ESP_LOGW(TAG, "climate_read: climate object not found!");
+      *status_code = HAP_STATUS_RES_ABSENT;
+      return HAP_FAIL;
+    }
+
     hap_val_t state{};
     const char* type = hap_char_get_type_uuid(hc);
 
@@ -45,12 +55,20 @@ class ClimateEntity : public HAPEntity {
     }
 
     hap_char_update_val(hc, &state);
+    *status_code = HAP_STATUS_SUCCESS;
     return HAP_SUCCESS;
   }
 
   static int climate_write(hap_write_data_t write_data[], int count, void* serv_priv, void* write_priv) {
+    if (serv_priv == nullptr) {
+      return HAP_FAIL;
+    }
     std::string key((char*)serv_priv);
     climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
+    if (obj == nullptr) {
+      ESP_LOGW(TAG, "climate_write: climate object not found!");
+      return HAP_FAIL;
+    }
 
     for (int i = 0; i < count; i++) {
       hap_write_data_t* write = &write_data[i];
@@ -62,6 +80,7 @@ class ClimateEntity : public HAPEntity {
           case 1: obj->make_call().set_mode(climate::CLIMATE_MODE_HEAT).perform(); break;
           case 2: obj->make_call().set_mode(climate::CLIMATE_MODE_COOL).perform(); break;
           case 3: obj->make_call().set_mode(climate::CLIMATE_MODE_AUTO).perform(); break;
+          default: break;
         }
       } else if (!strcmp(type, HAP_CHAR_UUID_TARGET_TEMPERATURE)) {
         obj->make_call().set_target_temperature(write->val.f).perform();
@@ -81,6 +100,11 @@ class ClimateEntity : public HAPEntity {
   ClimateEntity(climate::Climate* ptr) : climatePtr(ptr), HAPEntity({{MODEL, "HAP-CLIMATE"}}) {}
 
   void setup() override {
+    if (climatePtr == nullptr) {
+      ESP_LOGE(TAG, "No climate pointer, cannot setup HomeKit ClimateEntity!");
+      return;
+    }
+
     // 1. 設置回調
     climatePtr->add_on_state_callback([this](climate::Climate& obj) {
       ClimateEntity::on_climate_update(obj);
@@ -93,13 +117,12 @@ class ClimateEntity : public HAPEntity {
     snprintf(acc_name, sizeof(acc_name), "%s", climatePtr->get_name().c_str());
     snprintf(acc_serial, sizeof(acc_serial), "%lu", climatePtr->get_object_id_hash());
 
-    // 使用 meta (有的話)，否則 fallback
     acc_cfg.name = acc_name;
     acc_cfg.serial_num = acc_serial;
-    acc_cfg.model = (char *) (this->meta.count("model") ? this->meta["model"].c_str() : "ESP-CLIMATE");
-    acc_cfg.manufacturer = (char *) (this->meta.count("manufacturer") ? this->meta["manufacturer"].c_str() : "rednblkx");
-    acc_cfg.fw_rev = (char *) (this->meta.count("fw_rev") ? this->meta["fw_rev"].c_str() : "0.1.0");
-    acc_cfg.hw_rev = (char *)"1.0";
+    strcpy(acc_cfg.model, "ESP-CLIMATE");
+    strcpy(acc_cfg.manufacturer, "rednblkx");
+    strcpy(acc_cfg.fw_rev, "0.1.0");
+    acc_cfg.hw_rev = nullptr;
     acc_cfg.cid = HAP_CID_THERMOSTAT;
     acc_cfg.identify_routine = acc_identify;
 
@@ -109,12 +132,14 @@ class ClimateEntity : public HAPEntity {
       case climate::CLIMATE_ACTION_OFF: current_mode = 0; break;
       case climate::CLIMATE_ACTION_HEATING: current_mode = 1; break;
       case climate::CLIMATE_ACTION_COOLING: current_mode = 2; break;
+      default: current_mode = 0; break;
     }
     switch (climatePtr->mode) {
       case climate::CLIMATE_MODE_OFF: target_mode = 0; break;
       case climate::CLIMATE_MODE_HEAT: target_mode = 1; break;
       case climate::CLIMATE_MODE_COOL: target_mode = 2; break;
       case climate::CLIMATE_MODE_AUTO: target_mode = 3; break;
+      default: target_mode = 0; break;
     }
 
     hap_serv_t* service = hap_serv_thermostat_create(
@@ -130,7 +155,7 @@ class ClimateEntity : public HAPEntity {
       hap_serv_add_char(service, hap_char_target_relative_humidity_create(climatePtr->target_humidity));
 
     hap_acc_t* accessory = hap_acc_create(&acc_cfg);
-    hap_serv_set_priv(service, acc_serial);  // 使用 static char
+    hap_serv_set_priv(service, acc_serial);  // 使用 static char (避免釋放)
     hap_serv_set_write_cb(service, climate_write);
     hap_serv_set_read_cb(service, climate_read);
     hap_acc_add_serv(accessory, service);
