@@ -27,14 +27,9 @@ class ClimateEntity : public HAPEntity {
   }
 
   static int climate_read(hap_char_t* hc, hap_status_t* status_code, void* serv_priv, void* read_priv) {
-    if (serv_priv == nullptr) {
-      *status_code = HAP_STATUS_RES_ABSENT;
-      return HAP_FAIL;
-    }
-    std::string key((char*)serv_priv);
-    climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
-    if (obj == nullptr) {
-      ESP_LOGW(TAG, "climate_read: climate object not found!");
+    climate::Climate* obj = static_cast<climate::Climate*>(serv_priv);
+    if (!obj) {
+      ESP_LOGE(TAG, "climate_read: nullptr obj");
       *status_code = HAP_STATUS_RES_ABSENT;
       return HAP_FAIL;
     }
@@ -61,13 +56,9 @@ class ClimateEntity : public HAPEntity {
   }
 
   static int climate_write(hap_write_data_t write_data[], int count, void* serv_priv, void* write_priv) {
-    if (serv_priv == nullptr) {
-      return HAP_FAIL;
-    }
-    std::string key((char*)serv_priv);
-    climate::Climate* obj = App.get_climate_by_key(static_cast<uint32_t>(std::stoul(key)), false);
-    if (obj == nullptr) {
-      ESP_LOGW(TAG, "climate_write: climate object not found!");
+    climate::Climate* obj = static_cast<climate::Climate*>(serv_priv);
+    if (!obj) {
+      ESP_LOGE(TAG, "climate_write: nullptr obj");
       return HAP_FAIL;
     }
 
@@ -101,7 +92,7 @@ class ClimateEntity : public HAPEntity {
   ClimateEntity(climate::Climate* ptr) : climatePtr(ptr), HAPEntity({{MODEL, "HAP-CLIMATE"}}) {}
 
   void setup() override {
-    if (climatePtr == nullptr) {
+    if (!climatePtr) {
       ESP_LOGE(TAG, "No climate pointer, cannot setup HomeKit ClimateEntity!");
       return;
     }
@@ -114,12 +105,10 @@ class ClimateEntity : public HAPEntity {
     // HomeKit accessory 配置
     hap_acc_cfg_t acc_cfg{};
     static char acc_name[32];
-    static char acc_serial[32];
     snprintf(acc_name, sizeof(acc_name), "%s", climatePtr->get_name().c_str());
-    snprintf(acc_serial, sizeof(acc_serial), "%lu", climatePtr->get_object_id_hash());
 
     acc_cfg.name = acc_name;
-    acc_cfg.serial_num = acc_serial;
+    acc_cfg.serial_num = nullptr;  // 可選
     strcpy(acc_cfg.model, "ESP-CLIMATE");
     strcpy(acc_cfg.manufacturer, "rednblkx");
     strcpy(acc_cfg.fw_rev, "0.1.0");
@@ -156,11 +145,11 @@ class ClimateEntity : public HAPEntity {
       hap_serv_add_char(service, hap_char_target_relative_humidity_create(climatePtr->target_humidity));
 
     hap_acc_t* accessory = hap_acc_create(&acc_cfg);
-    hap_serv_set_priv(service, acc_serial);
+    hap_serv_set_priv(service, climatePtr);  // 使用 pointer 避免 core panic
     hap_serv_set_write_cb(service, climate_write);
     hap_serv_set_read_cb(service, climate_read);
     hap_acc_add_serv(accessory, service);
-    hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_serial));
+    hap_add_bridged_accessory(accessory, hap_get_unique_aid(acc_name));
   }
 };
 
