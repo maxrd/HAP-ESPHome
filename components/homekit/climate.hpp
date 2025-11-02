@@ -9,6 +9,7 @@
 #include "const.h"
 #include "hap_entity.h"
 
+
 namespace esphome
 {
   namespace homekit
@@ -141,7 +142,7 @@ namespace esphome
         hap_serv_t* service_fan = nullptr;
         std::string accessory_name = this->climatePtr->get_name();
         acc_cfg.name = accessory_name.data();
-        acc_cfg.serial_num = std::to_string(this->climatePtr->get_object_id_hash()).data();
+//        acc_cfg.serial_num = std::to_string(this->climatePtr->get_object_id_hash()).data();
         climate::ClimateTraits climateTraits = this->climatePtr->get_traits();
         climate::ClimateMode climateMode = this->climatePtr->mode;
         climate::ClimateAction climateAction = this->climatePtr->action;
@@ -152,13 +153,16 @@ namespace esphome
           current_mode = 0;
           break;
 
+
         case climate::ClimateAction::CLIMATE_ACTION_HEATING:
           current_mode = 1;
           break;
 
+
         case climate::ClimateAction::CLIMATE_ACTION_COOLING:
           current_mode = 2;
           break;
+
 
         default:
           current_mode = 0;
@@ -169,26 +173,30 @@ namespace esphome
           target_mode = 0;
           break;
 
+
         case climate::ClimateMode::CLIMATE_MODE_HEAT:
           target_mode = 1;
           break;
+
 
         case climate::ClimateMode::CLIMATE_MODE_COOL:
           target_mode = 2;
           break;
 
+
         case climate::ClimateMode::CLIMATE_MODE_AUTO:
           target_mode = 3;
           break;
+
 
         default:
           break;
         }
         ESP_LOGI(TAG, "CTemp: %.2f TTemp: %.2f CHum: %.2f THum: %.2f", this->climatePtr->current_temperature, this->climatePtr->target_temperature, this->climatePtr->current_humidity, this->climatePtr->target_humidity);
-        service = hap_serv_thermostat_create(current_mode, target_mode, this->climatePtr->current_temperature, this->climatePtr->target_temperature, units);
-        if (climateTraits.get_supports_current_humidity()) {
-          hap_serv_add_char(service, hap_char_current_relative_humidity_create(this->climatePtr->current_humidity));
-        }
+        service = hap_serv_thermostat_create(current_mode, target_mode, this->climatePtr->current_temperature, 25, units);
+//        if (climateTraits.get_supports_current_humidity()) {
+//          hap_serv_add_char(service, hap_char_current_relative_humidity_create(this->climatePtr->current_humidity));
+//        }
         if (climateTraits.get_supports_target_humidity()) {
           hap_serv_add_char(service, hap_char_target_relative_humidity_create(this->climatePtr->target_humidity));
         }
@@ -201,12 +209,20 @@ namespace esphome
           ESP_LOGI(TAG, "ID HASH: %lu", this->climatePtr->get_object_id_hash());
           hap_serv_set_priv(service, strdup(std::to_string(this->climatePtr->get_object_id_hash()).c_str()));
 
+
           /* Set the write callback for the service */
           hap_serv_set_write_cb(service, climate_write);
           hap_serv_set_read_cb(service, climate_read);
 
-          /* Add the Lock Service to the Accessory Object */
+
+          /* Add the Climate Service to the Accessory Object */
           hap_acc_add_serv(accessory, service);
+//          if (service_fan) {
+//            hap_serv_set_priv(service_fan, this);
+//            hap_acc_add_serv(accessory, service_fan);
+//          }
+
+
 
 
           /* Add the Accessory to the HomeKit Database */
