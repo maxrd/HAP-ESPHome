@@ -126,6 +126,7 @@ namespace esphome
         return HAP_SUCCESS;
       }
     public:
+      using HAPEntity::setup;
       ClimateEntity(climate::Climate* climatePtr) : HAPEntity({{MODEL, "HAP-CLIMATE"}}), climatePtr(climatePtr) {}
       void setup(TemperatureUnits units = CELSIUS) {
         hap_acc_cfg_t acc_cfg = {
